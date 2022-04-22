@@ -103,6 +103,9 @@ endif
 if with_microsoft_clc or with_gallium_d3d12 or with_spirv_to_dxil
   subdir('microsoft')
 endif
+if with_playground_vk
+  subdir('playground')
+endif
 if with_gallium_nouveau
   subdir('nouveau')
 endif
