@@ -1,11 +1,5 @@
 #include "pvk_private.h"
 
-static const struct vk_instance_extension_table instance_extensions = {
-   .KHR_get_physical_device_properties2   = true,
-   .EXT_debug_report                      = true,
-   .EXT_debug_utils                       = true,
-};
-
 VKAPI_ATTR VkResult VKAPI_CALL
 pvk_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
                    const VkAllocationCallbacks *pAllocator,
@@ -26,7 +20,7 @@ pvk_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
    vk_instance_dispatch_table_from_entrypoints(
       &dispatch_table, &pvk_instance_entrypoints, true);
 
-   result = vk_instance_init(&instance->vk, &instance_extensions,
+   result = vk_instance_init(&instance->vk, NULL,
                              &dispatch_table, pCreateInfo, pAllocator);
    if (result != VK_SUCCESS) {
       vk_free(pAllocator, instance);
