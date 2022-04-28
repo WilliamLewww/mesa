@@ -1,3 +1,5 @@
+vulkan_dep = dependency('vulkan')
+
 test(
   'test_instance',
   executable(
@@ -10,7 +12,7 @@ test(
       libvulkan_playground
     ],
     dependencies : [
-      idep_vulkan_util_headers
+      vulkan_dep
     ],
   ),
   suite : ['playground']

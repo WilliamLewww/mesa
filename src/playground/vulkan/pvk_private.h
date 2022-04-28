@@ -4,7 +4,7 @@
 #include "vulkan/util/vk_alloc.h"
 
 struct pvk_instance {
-   struct vk_instance vk;
+  struct vk_instance vk;
 };
 
 VK_DEFINE_HANDLE_CASTS(pvk_instance, vk.base, VkInstance,
