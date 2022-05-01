@@ -16,7 +16,9 @@ playground_icd = custom_target(
 
 pvk_files = files(
   'pvk_private.h',
-  'pvk_device.c'
+  'pvk_device.c',
+  'pvk_debug.h',
+  'pvk_debug.c'
 )
 
 pvk_deps = [

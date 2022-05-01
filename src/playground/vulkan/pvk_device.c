@@ -1,3 +1,4 @@
+#include "pvk_debug.h"
 #include "pvk_private.h"
 
 static const struct vk_instance_extension_table
@@ -16,6 +17,8 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
     const VkInstanceCreateInfo *pCreateInfo,
     const VkAllocationCallbacks *pAllocator, VkInstance *pInstance) {
 
+  PVK_LOGI("pvk_CreateInstance entry", VK_SUCCESS);
+
   struct pvk_instance *instance;
   VkResult result;
 
@@ -27,6 +30,9 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
                       VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
 
   if (!instance) {
+    PVK_LOGE("vk_alloc: Error allocating instance memory",
+             VK_ERROR_OUT_OF_HOST_MEMORY);
+
     return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
   }
 
@@ -38,14 +44,17 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
   result = vk_instance_init(&instance->vk, &pvk_instance_extensions_supported,
                             &dispatch_table, pCreateInfo, pAllocator);
 
+  PVK_LOGI("vk_instance_init called", result);
+
   if (result != VK_SUCCESS) {
+    PVK_LOGE("vk_instance_init failed", result);
     vk_free(pAllocator, instance);
     return result;
   }
 
-  /* Initialize driver-specific stuff */
-
   *pInstance = pvk_instance_to_handle(instance);
+
+  PVK_LOGI("pvk_CreateInstance exit", VK_SUCCESS);
 
   return VK_SUCCESS;
 }
@@ -53,6 +62,8 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
 // =========================================================================
 VKAPI_ATTR void VKAPI_CALL pvk_DestroyInstance(
     VkInstance _instance, const VkAllocationCallbacks *pAllocator) {
+
+  PVK_LOGI("pvk_DestroyInstance entry", VK_SUCCESS);
 
   VK_FROM_HANDLE(pvk_instance, instance, _instance);
 
@@ -62,6 +73,8 @@ VKAPI_ATTR void VKAPI_CALL pvk_DestroyInstance(
 
   vk_instance_finish(&instance->vk);
   vk_free(&instance->vk.alloc, instance);
+
+  PVK_LOGI("pvk_DestroyInstance exit", VK_SUCCESS);
 }
 
 // =========================================================================
@@ -69,12 +82,19 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_EnumeratePhysicalDevices(
     VkInstance _instance, uint32_t *pPhysicalDeviceCount,
     VkPhysicalDevice *pPhysicalDevices) {
 
+  PVK_LOGI("pvk_EnumeratePhysicalDevices entry", VK_SUCCESS);
+
+  PVK_LOGI("pvk_EnumeratePhysicalDevices exit", VK_SUCCESS);
+
   return VK_SUCCESS;
 }
 
 // =========================================================================
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
+
+  const char *extraMessageArray[] = {pName, "\0"};
+  PVK_LOGIA("pvk_GetInstanceProcAddr entry", VK_SUCCESS, extraMessageArray);
 
   VK_FROM_HANDLE(pvk_instance, instance, _instance);
 
@@ -105,6 +125,8 @@ pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
   if (instance == NULL) {
     return NULL;
   }
+
+  PVK_LOGIA("pvk_GetInstanceProcAddr exit", VK_SUCCESS, extraMessageArray);
 
   return vk_instance_get_proc_addr(&instance->vk, &pvk_instance_entrypoints,
                                    pName);

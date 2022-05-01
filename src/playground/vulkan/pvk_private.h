@@ -1,6 +1,8 @@
+#ifndef PVK_PRIVATE_H
+#define PVK_PRIVATE_H
+
 #include "pvk_entrypoints.h"
 #include "vulkan/runtime/vk_instance.h"
-#include "vulkan/runtime/vk_log.h"
 #include "vulkan/util/vk_alloc.h"
 
 struct pvk_instance {
@@ -9,3 +11,5 @@ struct pvk_instance {
 
 VK_DEFINE_HANDLE_CASTS(pvk_instance, vk.base, VkInstance,
                        VK_OBJECT_TYPE_INSTANCE)
+
+#endif /* PVK_PRIVATE_H */
