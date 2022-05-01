@@ -2,8 +2,10 @@
 #define PVK_PRIVATE_H
 
 #include "pvk_entrypoints.h"
+
 #include "vulkan/runtime/vk_instance.h"
 #include "vulkan/util/vk_alloc.h"
+#include "vulkan/util/vk_util.h"
 
 struct pvk_instance {
   struct vk_instance vk;
