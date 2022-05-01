@@ -93,15 +93,11 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_EnumeratePhysicalDevices(
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
 
-  const char *extraMessageArray[] = {pName, "\0"};
-  PVK_LOGIA("pvk_GetInstanceProcAddr entry", VK_SUCCESS, extraMessageArray);
+  // const char *extraMessageArray[] = {pName, "\0"};
+  // PVK_LOGIA("pvk_GetInstanceProcAddr entry", VK_SUCCESS, extraMessageArray);
 
   VK_FROM_HANDLE(pvk_instance, instance, _instance);
 
-  /* The Vulkan 1.0 spec for vkGetInstanceProcAddr has a table of exactly
-   * when we have to return valid function pointers, NULL, or it's left
-   * undefined.  See the table for exact details.
-   */
   if (pName == NULL) {
     return NULL;
   }
@@ -114,10 +110,6 @@ pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
   LOOKUP_PVK_ENTRYPOINT(EnumerateInstanceLayerProperties);
   LOOKUP_PVK_ENTRYPOINT(EnumerateInstanceVersion);
   LOOKUP_PVK_ENTRYPOINT(CreateInstance);
-
-  /* GetInstanceProcAddr() can also be called with a NULL instance.
-   * See https://gitlab.khronos.org/vulkan/vulkan/issues/2057
-   */
   LOOKUP_PVK_ENTRYPOINT(GetInstanceProcAddr);
 
 #undef LOOKUP_PVK_ENTRYPOINT
@@ -126,7 +118,7 @@ pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
     return NULL;
   }
 
-  PVK_LOGIA("pvk_GetInstanceProcAddr exit", VK_SUCCESS, extraMessageArray);
+  // PVK_LOGIA("pvk_GetInstanceProcAddr exit", VK_SUCCESS, extraMessageArray);
 
   return vk_instance_get_proc_addr(&instance->vk, &pvk_instance_entrypoints,
                                    pName);
@@ -150,7 +142,6 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_EnumerateInstanceLayerProperties(
     return VK_SUCCESS;
   }
 
-  /* None supported at this time */
   return vk_error(NULL, VK_ERROR_LAYER_NOT_PRESENT);
 }
 
