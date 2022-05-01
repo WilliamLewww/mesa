@@ -22,6 +22,7 @@ pvk_files = files(
 )
 
 pvk_deps = [
+  dep_libdrm_amdgpu,
   idep_vulkan_runtime,
   idep_vulkan_util,
   idep_nir

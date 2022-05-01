@@ -1,6 +1,8 @@
 #include "pvk_debug.h"
 #include "pvk_private.h"
 
+#include <xf86drm.h>
+
 static const struct vk_instance_extension_table
     pvk_instance_extensions_supported = {
         .KHR_device_group_creation = true,
@@ -78,44 +80,44 @@ VKAPI_ATTR void VKAPI_CALL pvk_DestroyInstance(
 
 // =========================================================================
 static VkResult
-radv_enumerate_physical_devices(struct radv_instance *instance) {
-//  if (instance->physical_devices_enumerated)
-//    return VK_SUCCESS;
-//  
-//  instance->physical_devices_enumerated = true;
-//  
-//  VkResult result = VK_SUCCESS;
-//  
-//  drmDevicePtr devices[8];
-//  int max_devices = drmGetDevices2(0, devices, ARRAY_SIZE(devices));
-//  
-//  if (instance->debug_flags & RADV_DEBUG_STARTUP)
-//    radv_logi("Found %d drm nodes", max_devices);
-//  
-//  if (max_devices < 1)
-//    return vk_error(instance, VK_SUCCESS);
-//  
-//  for (unsigned i = 0; i < (unsigned)max_devices; i++) {
-//    if (devices[i]->available_nodes & 1 << DRM_NODE_RENDER &&
-//        devices[i]->bustype == DRM_BUS_PCI &&
-//        devices[i]->deviceinfo.pci->vendor_id == ATI_VENDOR_ID) {
-//  
-//      struct radv_physical_device *pdevice;
-//      result = radv_physical_device_try_create(instance, devices[i],
-//      &pdevice); if (result == VK_ERROR_INCOMPATIBLE_DRIVER) {
-//        result = VK_SUCCESS;
-//        continue;
-//      }
-//  
-//      if (result != VK_SUCCESS)
-//        break;
-//  
-//      list_addtail(&pdevice->link, &instance->physical_devices);
-//    }
-//  }
-//  drmFreeDevices(devices, max_devices);
-//  
-//  return result;
+pvk_enumerate_physical_devices(struct pvk_instance *instance) {
+  if (instance->physical_devices_enumerated) {
+    return VK_SUCCESS;
+  }
+
+  instance->physical_devices_enumerated = true;
+
+  VkResult result = VK_SUCCESS;
+
+  drmDevicePtr devices[8];
+  int max_devices = drmGetDevices2(0, devices, ARRAY_SIZE(devices));
+
+  pvk_log("Found %d drm nodes", max_devices);
+
+  if (max_devices < 1)
+    return vk_error(instance, VK_SUCCESS);
+
+  for (unsigned i = 0; i < (unsigned)max_devices; i++) {
+    if (devices[i]->available_nodes & 1 << DRM_NODE_RENDER &&
+        devices[i]->bustype == DRM_BUS_PCI &&
+        devices[i]->deviceinfo.pci->vendor_id == ATI_VENDOR_ID) {
+
+      struct pvk_physical_device *pdevice;
+      result = pvk_physical_device_try_create(instance, devices[i], &pdevice);
+      if (result == VK_ERROR_INCOMPATIBLE_DRIVER) {
+        result = VK_SUCCESS;
+        continue;
+      }
+
+      if (result != VK_SUCCESS)
+        break;
+
+      list_addtail(&pdevice->link, &instance->physical_devices);
+    }
+  }
+  drmFreeDevices(devices, max_devices);
+
+  return result;
 }
 
 // =========================================================================

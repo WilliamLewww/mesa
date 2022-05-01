@@ -2,7 +2,7 @@ vulkan_dep = dependency('vulkan')
 
 test_files = [
   'test_instance.cpp',
-  'test_physical_devices.cpp'
+  'test_physical_device.cpp'
 ]
 
 foreach test_file : test_files
