@@ -110,6 +110,9 @@ pvk_physical_device_try_create(struct pvk_instance *instance,
           "Could not get the kernel driver version for device %s: %m", path);
     }
 
+    pvk_log("Name: {%s} Date: {%s} Description: {%s}", version->name,
+            version->date, version->desc);
+
     if (strcmp(version->name, "amdgpu")) {
       drmFreeVersion(version);
       close(fd);
@@ -181,7 +184,7 @@ static VkResult pvk_enumerate_physical_devices(struct pvk_instance *instance) {
     if (devices[i]->available_nodes & 1 << DRM_NODE_RENDER &&
         devices[i]->bustype == DRM_BUS_PCI) {
 
-      struct pvk_physical_device *pdevice;
+      struct pvk_physical_device *pdevice = NULL;
       result = pvk_physical_device_try_create(instance, devices[i], &pdevice);
       if (result == VK_ERROR_INCOMPATIBLE_DRIVER) {
         result = VK_SUCCESS;
