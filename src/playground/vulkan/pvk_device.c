@@ -1,10 +1,6 @@
 #include "pvk_debug.h"
 #include "pvk_private.h"
 
-#include <xf86drm.h>
-
-#include <fcntl.h>
-
 static const struct vk_instance_extension_table
     pvk_instance_extensions_supported = {
         .KHR_device_group_creation = true,
@@ -15,6 +11,10 @@ static const struct vk_instance_extension_table
         .EXT_debug_report = true,
         .EXT_debug_utils = true,
 };
+
+static const struct debug_control pvk_debug_options[] = {
+   {"functionentryexit", PVK_FUNCTION_ENTRY_EXIT},
+   {NULL, 0}};
 
 // =========================================================================
 VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
@@ -53,8 +53,13 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
     return result;
   }
 
+  instance->debug_flags =
+      parse_debug_string(getenv("PVK_DEBUG"), pvk_debug_options);
+
   instance->physical_devices_enumerated = false;
   list_inithead(&instance->physical_devices);
+
+  VG(VALGRIND_CREATE_MEMPOOL(instance, 0, false));
 
   *pInstance = pvk_instance_to_handle(instance);
 
@@ -236,6 +241,8 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_EnumeratePhysicalDevices(
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
 
+  pvk_log("pvk_GetInstanceProcAddr enter");
+
   VK_FROM_HANDLE(pvk_instance, instance, _instance);
 
   if (pName == NULL) {
@@ -257,6 +264,8 @@ pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
   if (instance == NULL) {
     return NULL;
   }
+
+  pvk_log("pvk_GetInstanceProcAddr exit");
 
   return vk_instance_get_proc_addr(&instance->vk, &pvk_instance_entrypoints,
                                    pName);

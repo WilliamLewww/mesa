@@ -8,6 +8,16 @@
 #include "vulkan/util/vk_alloc.h"
 #include "vulkan/util/vk_util.h"
 
+#include "util/debug.h"
+
+#include <xf86drm.h>
+
+#include <valgrind.h>
+#include <memcheck.h>
+#include <fcntl.h>
+
+#define VG(x) x
+
 struct pvk_physical_device {
   struct vk_physical_device vk;
 
@@ -18,6 +28,8 @@ struct pvk_physical_device {
 
 struct pvk_instance {
   struct vk_instance vk;
+
+  uint64_t debug_flags;
 
   bool physical_devices_enumerated;
   struct list_head physical_devices;
