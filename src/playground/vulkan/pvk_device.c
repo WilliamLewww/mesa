@@ -3,6 +3,8 @@
 
 #include <xf86drm.h>
 
+#include <fcntl.h>
+
 static const struct vk_instance_extension_table
     pvk_instance_extensions_supported = {
         .KHR_device_group_creation = true,
@@ -19,7 +21,7 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
     const VkInstanceCreateInfo *pCreateInfo,
     const VkAllocationCallbacks *pAllocator, VkInstance *pInstance) {
 
-  pvk_log("pvk_CreateInstance entry");
+  pvk_log("pvk_CreateInstance enter");
 
   struct pvk_instance *instance;
   VkResult result;
@@ -32,8 +34,6 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
                       VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
 
   if (!instance) {
-    pvk_log("vk_alloc: Error allocating instance memory");
-
     return vk_error(NULL, VK_ERROR_OUT_OF_HOST_MEMORY);
   }
 
@@ -53,6 +53,9 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
     return result;
   }
 
+  instance->physical_devices_enumerated = false;
+  list_inithead(&instance->physical_devices);
+
   *pInstance = pvk_instance_to_handle(instance);
 
   pvk_log("pvk_CreateInstance exit");
@@ -64,7 +67,7 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
 VKAPI_ATTR void VKAPI_CALL pvk_DestroyInstance(
     VkInstance _instance, const VkAllocationCallbacks *pAllocator) {
 
-  pvk_log("pvk_DestroyInstance entry");
+  pvk_log("pvk_DestroyInstance enter");
 
   VK_FROM_HANDLE(pvk_instance, instance, _instance);
 
@@ -80,7 +83,84 @@ VKAPI_ATTR void VKAPI_CALL pvk_DestroyInstance(
 
 // =========================================================================
 static VkResult
-pvk_enumerate_physical_devices(struct pvk_instance *instance) {
+pvk_physical_device_try_create(struct pvk_instance *instance,
+                               drmDevicePtr drm_device,
+                               struct pvk_physical_device **device_out) {
+
+  VkResult result;
+  int fd = -1;
+  int master_fd = -1;
+
+  if (drm_device) {
+    const char *path = drm_device->nodes[DRM_NODE_RENDER];
+    drmVersionPtr version;
+
+    fd = open(path, O_RDWR | O_CLOEXEC);
+    if (fd < 0) {
+      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                       "Could not open device %s: %m", path);
+    }
+
+    version = drmGetVersion(fd);
+    if (!version) {
+      close(fd);
+
+      return vk_errorf(
+          instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+          "Could not get the kernel driver version for device %s: %m", path);
+    }
+
+    if (strcmp(version->name, "amdgpu")) {
+      drmFreeVersion(version);
+      close(fd);
+
+      return vk_errorf(instance, VK_ERROR_INCOMPATIBLE_DRIVER,
+                       "Device '%s' is not using the AMDGPU kernel driver: %m",
+                       path);
+    }
+    drmFreeVersion(version);
+
+    pvk_log("Found compatible device '%s'.", path);
+  }
+
+  struct pvk_physical_device *device =
+      vk_zalloc2(&instance->vk.alloc, NULL, sizeof(*device), 8,
+                 VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+  if (!device) {
+    result = vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+    goto fail_fd;
+  }
+
+  struct vk_physical_device_dispatch_table dispatch_table;
+  vk_physical_device_dispatch_table_from_entrypoints(
+      &dispatch_table, &pvk_physical_device_entrypoints, true);
+
+  result = vk_physical_device_init(&device->vk, &instance->vk, NULL,
+                                   &dispatch_table);
+  if (result != VK_SUCCESS) {
+    goto fail_alloc;
+  }
+
+  device->instance = instance;
+  *device_out = device;
+
+  return VK_SUCCESS;
+
+fail_alloc:
+  vk_free(&instance->vk.alloc, device);
+fail_fd:
+  if (fd != -1) {
+    close(fd);
+  }
+  if (master_fd != -1) {
+    close(master_fd);
+  }
+  return result;
+}
+
+// =========================================================================
+static VkResult pvk_enumerate_physical_devices(struct pvk_instance *instance) {
+
   if (instance->physical_devices_enumerated) {
     return VK_SUCCESS;
   }
@@ -99,8 +179,7 @@ pvk_enumerate_physical_devices(struct pvk_instance *instance) {
 
   for (unsigned i = 0; i < (unsigned)max_devices; i++) {
     if (devices[i]->available_nodes & 1 << DRM_NODE_RENDER &&
-        devices[i]->bustype == DRM_BUS_PCI &&
-        devices[i]->deviceinfo.pci->vendor_id == ATI_VENDOR_ID) {
+        devices[i]->bustype == DRM_BUS_PCI) {
 
       struct pvk_physical_device *pdevice;
       result = pvk_physical_device_try_create(instance, devices[i], &pdevice);
@@ -125,16 +204,29 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_EnumeratePhysicalDevices(
     VkInstance _instance, uint32_t *pPhysicalDeviceCount,
     VkPhysicalDevice *pPhysicalDevices) {
 
-  pvk_log("pvk_EnumeratePhysicalDevices entry");
+  pvk_log("pvk_EnumeratePhysicalDevices enter");
 
   VK_FROM_HANDLE(pvk_instance, instance, _instance);
 
   VK_OUTARRAY_MAKE_TYPED(VkPhysicalDevice, out, pPhysicalDevices,
                          pPhysicalDeviceCount);
 
+  VkResult result = pvk_enumerate_physical_devices(instance);
+  if (result != VK_SUCCESS) {
+    return result;
+  }
+
+  list_for_each_entry(struct pvk_physical_device, pdevice,
+                      &instance->physical_devices, link) {
+
+    vk_outarray_append_typed(VkPhysicalDevice, &out, i) {
+      *i = pvk_physical_device_to_handle(pdevice);
+    }
+  }
+
   pvk_log("pvk_EnumeratePhysicalDevices exit");
 
-  return VK_SUCCESS;
+  return vk_outarray_status(&out);
 }
 
 // =========================================================================
@@ -171,7 +263,7 @@ pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
 VKAPI_ATTR VkResult VKAPI_CALL
 pvk_EnumerateInstanceVersion(uint32_t *pApiVersion) {
 
-  pvk_log("pvk_EnumerateInstanceVersion entry");
+  pvk_log("pvk_EnumerateInstanceVersion enter");
 
   *pApiVersion = VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION);
 
@@ -184,7 +276,7 @@ pvk_EnumerateInstanceVersion(uint32_t *pApiVersion) {
 VKAPI_ATTR VkResult VKAPI_CALL pvk_EnumerateInstanceLayerProperties(
     uint32_t *pPropertyCount, VkLayerProperties *pProperties) {
 
-  pvk_log("pvk_EnumerateInstanceLayerProperties entry");
+  pvk_log("pvk_EnumerateInstanceLayerProperties enter");
 
   if (pProperties == NULL) {
     *pPropertyCount = 0;
@@ -201,7 +293,7 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_EnumerateInstanceExtensionProperties(
     const char *pLayerName, uint32_t *pPropertyCount,
     VkExtensionProperties *pProperties) {
 
-  pvk_log("pvk_EnumerateInstanceExtensionProperties entry");
+  pvk_log("pvk_EnumerateInstanceExtensionProperties enter");
 
   if (pLayerName) {
     return vk_error(NULL, VK_ERROR_LAYER_NOT_PRESENT);
