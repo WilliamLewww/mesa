@@ -13,15 +13,12 @@ static const struct vk_instance_extension_table
 };
 
 static const struct debug_control pvk_debug_options[] = {
-   {"functionentryexit", PVK_FUNCTION_ENTRY_EXIT},
-   {NULL, 0}};
+    {"output", PVK_DEBUG_OUTPUT}, {NULL, 0}};
 
 // =========================================================================
 VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
     const VkInstanceCreateInfo *pCreateInfo,
     const VkAllocationCallbacks *pAllocator, VkInstance *pInstance) {
-
-  pvk_log("pvk_CreateInstance enter");
 
   struct pvk_instance *instance;
   VkResult result;
@@ -45,16 +42,17 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
   result = vk_instance_init(&instance->vk, &pvk_instance_extensions_supported,
                             &dispatch_table, pCreateInfo, pAllocator);
 
-  pvk_log("pvk_CreateInstance called (return code %d)", result);
-
   if (result != VK_SUCCESS) {
-    pvk_log("pvk_CreateInstance failed (return code %d)", result);
     vk_free(pAllocator, instance);
     return result;
   }
 
   instance->debug_flags =
       parse_debug_string(getenv("PVK_DEBUG"), pvk_debug_options);
+
+  if (instance->debug_flags & PVK_DEBUG_OUTPUT) {
+    pvk_log("Initialize instance with {vk_instance_init}");
+  }
 
   instance->physical_devices_enumerated = false;
   list_inithead(&instance->physical_devices);
@@ -63,8 +61,6 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
 
   *pInstance = pvk_instance_to_handle(instance);
 
-  pvk_log("pvk_CreateInstance exit");
-
   return VK_SUCCESS;
 }
 
@@ -72,18 +68,31 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_CreateInstance(
 VKAPI_ATTR void VKAPI_CALL pvk_DestroyInstance(
     VkInstance _instance, const VkAllocationCallbacks *pAllocator) {
 
-  pvk_log("pvk_DestroyInstance enter");
-
   VK_FROM_HANDLE(pvk_instance, instance, _instance);
 
   if (!instance) {
     return;
   }
 
+  list_for_each_entry_safe(struct pvk_physical_device, pdevice,
+                           &instance->physical_devices, link) {
+
+    if (pdevice->local_fd != -1) {
+      close(pdevice->local_fd);
+    }
+
+    if (pdevice->master_fd != -1) {
+      close(pdevice->master_fd);
+    }
+
+    vk_physical_device_finish(&pdevice->vk);
+    vk_free(&pdevice->instance->vk.alloc, pdevice);
+  }
+
+  VG(VALGRIND_DESTROY_MEMPOOL(instance));
+
   vk_instance_finish(&instance->vk);
   vk_free(&instance->vk.alloc, instance);
-
-  pvk_log("pvk_DestroyInstance exit");
 }
 
 // =========================================================================
@@ -95,6 +104,8 @@ pvk_physical_device_try_create(struct pvk_instance *instance,
   VkResult result;
   int fd = -1;
   int master_fd = -1;
+
+  char name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
 
   if (drm_device) {
     const char *path = drm_device->nodes[DRM_NODE_RENDER];
@@ -115,9 +126,6 @@ pvk_physical_device_try_create(struct pvk_instance *instance,
           "Could not get the kernel driver version for device %s: %m", path);
     }
 
-    pvk_log("Name: {%s} Date: {%s} Description: {%s}", version->name,
-            version->date, version->desc);
-
     if (strcmp(version->name, "amdgpu")) {
       drmFreeVersion(version);
       close(fd);
@@ -126,14 +134,23 @@ pvk_physical_device_try_create(struct pvk_instance *instance,
                        "Device '%s' is not using the AMDGPU kernel driver: %m",
                        path);
     }
-    drmFreeVersion(version);
 
-    pvk_log("Found compatible device '%s'.", path);
+    strcpy(name, version->name);
+
+    if (instance->debug_flags & PVK_DEBUG_OUTPUT) {
+      pvk_log("Name: {%s} Date: {%s} Description: {%s}", version->name,
+              version->date, version->desc);
+
+      pvk_log("Found compatible drm device '%s'.", path);
+    }
+
+    drmFreeVersion(version);
   }
 
   struct pvk_physical_device *device =
       vk_zalloc2(&instance->vk.alloc, NULL, sizeof(*device), 8,
                  VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+
   if (!device) {
     result = vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
     goto fail_fd;
@@ -149,7 +166,17 @@ pvk_physical_device_try_create(struct pvk_instance *instance,
     goto fail_alloc;
   }
 
+  if (instance->debug_flags & PVK_DEBUG_OUTPUT) {
+    pvk_log("Initialize physical device with {vk_physical_device_init}");
+  }
+
+  strcpy(device->name, name);
+
+  device->master_fd = master_fd;
+  device->local_fd = fd;
+
   device->instance = instance;
+
   *device_out = device;
 
   return VK_SUCCESS;
@@ -180,7 +207,9 @@ static VkResult pvk_enumerate_physical_devices(struct pvk_instance *instance) {
   drmDevicePtr devices[8];
   int max_devices = drmGetDevices2(0, devices, ARRAY_SIZE(devices));
 
-  pvk_log("Found %d drm nodes", max_devices);
+  if (instance->debug_flags & PVK_DEBUG_OUTPUT) {
+    pvk_log("Found %d drm nodes", max_devices);
+  }
 
   if (max_devices < 1)
     return vk_error(instance, VK_SUCCESS);
@@ -212,8 +241,6 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_EnumeratePhysicalDevices(
     VkInstance _instance, uint32_t *pPhysicalDeviceCount,
     VkPhysicalDevice *pPhysicalDevices) {
 
-  pvk_log("pvk_EnumeratePhysicalDevices enter");
-
   VK_FROM_HANDLE(pvk_instance, instance, _instance);
 
   VK_OUTARRAY_MAKE_TYPED(VkPhysicalDevice, out, pPhysicalDevices,
@@ -232,16 +259,35 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_EnumeratePhysicalDevices(
     }
   }
 
-  pvk_log("pvk_EnumeratePhysicalDevices exit");
-
   return vk_outarray_status(&out);
 }
 
 // =========================================================================
+VKAPI_ATTR void VKAPI_CALL pvk_GetPhysicalDeviceProperties(
+    VkPhysicalDevice physicalDevice, VkPhysicalDeviceProperties *pProperties) {
+
+  VK_FROM_HANDLE(pvk_physical_device, pdevice, physicalDevice);
+
+  *pProperties = (VkPhysicalDeviceProperties){
+      .apiVersion = PVK_API_VERSION,
+      .driverVersion = vk_get_driver_version(),
+      .vendorID = 0,
+      .deviceID = 0,
+      .deviceType = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU,
+      .limits = {},
+      .sparseProperties = {}};
+
+  strcpy(pProperties->deviceName, pdevice->name);
+}
+
+// =========================================================================
+VKAPI_ATTR void VKAPI_CALL pvk_GetPhysicalDeviceMemoryProperties(
+    VkPhysicalDevice physicalDevice,
+    VkPhysicalDeviceMemoryProperties *pMemoryProperties) {}
+
+// =========================================================================
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
-
-  pvk_log("pvk_GetInstanceProcAddr enter");
 
   VK_FROM_HANDLE(pvk_instance, instance, _instance);
 
@@ -265,8 +311,6 @@ pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
     return NULL;
   }
 
-  pvk_log("pvk_GetInstanceProcAddr exit");
-
   return vk_instance_get_proc_addr(&instance->vk, &pvk_instance_entrypoints,
                                    pName);
 }
@@ -275,11 +319,7 @@ pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
 VKAPI_ATTR VkResult VKAPI_CALL
 pvk_EnumerateInstanceVersion(uint32_t *pApiVersion) {
 
-  pvk_log("pvk_EnumerateInstanceVersion enter");
-
-  *pApiVersion = VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION);
-
-  pvk_log("pvk_EnumerateInstanceVersion exit");
+  *pApiVersion = PVK_API_VERSION;
 
   return VK_SUCCESS;
 }
@@ -288,14 +328,10 @@ pvk_EnumerateInstanceVersion(uint32_t *pApiVersion) {
 VKAPI_ATTR VkResult VKAPI_CALL pvk_EnumerateInstanceLayerProperties(
     uint32_t *pPropertyCount, VkLayerProperties *pProperties) {
 
-  pvk_log("pvk_EnumerateInstanceLayerProperties enter");
-
   if (pProperties == NULL) {
     *pPropertyCount = 0;
     return VK_SUCCESS;
   }
-
-  pvk_log("pvk_EnumerateInstanceLayerProperties exit");
 
   return vk_error(NULL, VK_ERROR_LAYER_NOT_PRESENT);
 }
@@ -305,13 +341,9 @@ VKAPI_ATTR VkResult VKAPI_CALL pvk_EnumerateInstanceExtensionProperties(
     const char *pLayerName, uint32_t *pPropertyCount,
     VkExtensionProperties *pProperties) {
 
-  pvk_log("pvk_EnumerateInstanceExtensionProperties enter");
-
   if (pLayerName) {
     return vk_error(NULL, VK_ERROR_LAYER_NOT_PRESENT);
   }
-
-  pvk_log("pvk_EnumerateInstanceExtensionProperties exit");
 
   return vk_enumerate_instance_extension_properties(
       &pvk_instance_extensions_supported, pPropertyCount, pProperties);

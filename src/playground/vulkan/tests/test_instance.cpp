@@ -19,9 +19,9 @@ int main(int argc, char **argv) {
     throwExceptionVulkanAPI(result, "vkEnumerateInstanceVersion");
   }
 
-  std::cout << VK_API_VERSION_MAJOR(apiVersion) << "." <<
-    VK_API_VERSION_MINOR(apiVersion) << "." <<
-    VK_API_VERSION_PATCH(apiVersion) << std::endl;
+  std::cout << "Vulkan ICD: " << VK_API_VERSION_MAJOR(apiVersion) << "."
+            << VK_API_VERSION_MINOR(apiVersion) << "."
+            << VK_API_VERSION_PATCH(apiVersion) << std::endl;
 
   VkInstanceCreateInfo instanceCreateInfo = {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,

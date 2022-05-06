@@ -12,11 +12,13 @@
 
 #include <xf86drm.h>
 
-#include <valgrind.h>
-#include <memcheck.h>
 #include <fcntl.h>
+#include <memcheck.h>
+#include <valgrind.h>
 
 #define VG(x) x
+
+#define PVK_API_VERSION VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION)
 
 struct pvk_physical_device {
   struct vk_physical_device vk;
@@ -24,6 +26,11 @@ struct pvk_physical_device {
   struct list_head link;
 
   struct pvk_instance *instance;
+
+  char name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
+
+  int local_fd;
+  int master_fd;
 };
 
 struct pvk_instance {

@@ -6,7 +6,7 @@
 #define pvk_printflike(a, b) __attribute__((__format__(__printf__, a, b)))
 
 enum {
-   PVK_FUNCTION_ENTRY_EXIT = 1ull << 0,
+  PVK_DEBUG_OUTPUT = 1ull << 0,
 };
 
 void pvk_log(const char *format, ...) pvk_printflike(1, 2);
