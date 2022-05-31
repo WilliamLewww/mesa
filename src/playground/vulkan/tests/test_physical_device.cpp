@@ -72,6 +72,17 @@ int main(int argc, char **argv) {
 
   VkPhysicalDevice activePhysicalDeviceHandle = physicalDeviceHandleList[0];
 
+  uint32_t queueFamilyPropertyCount = 0;
+  vkGetPhysicalDeviceQueueFamilyProperties(activePhysicalDeviceHandle,
+                                           &queueFamilyPropertyCount, NULL);
+
+  std::vector<VkQueueFamilyProperties> queueFamilyPropertiesList(
+      queueFamilyPropertyCount);
+
+  vkGetPhysicalDeviceQueueFamilyProperties(activePhysicalDeviceHandle,
+                                           &queueFamilyPropertyCount,
+                                           queueFamilyPropertiesList.data());
+
   vkDestroyInstance(instanceHandle, NULL);
 
   return 0;

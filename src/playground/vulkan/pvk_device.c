@@ -286,6 +286,11 @@ VKAPI_ATTR void VKAPI_CALL pvk_GetPhysicalDeviceMemoryProperties(
     VkPhysicalDeviceMemoryProperties *pMemoryProperties) {}
 
 // =========================================================================
+VKAPI_ATTR void VKAPI_CALL
+pvk_GetPhysicalDeviceQueueFamilyProperties(VkPhysicalDevice physicalDevice,
+    uint32_t *pCount, VkQueueFamilyProperties *pQueueFamilyProperties) {}
+
+// =========================================================================
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 pvk_GetInstanceProcAddr(VkInstance _instance, const char *pName) {
 
